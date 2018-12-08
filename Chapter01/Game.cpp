@@ -16,7 +16,8 @@ Game::Game()
 ,mRenderer(nullptr)
 ,mTicksCount(0)
 ,mIsRunning(true)
-,mPaddleDir(0)
+,mPlayerOnePaddleDir(0)
+,mPlayerTwoPaddleDir(0)
 {
 	
 }
@@ -59,13 +60,20 @@ bool Game::Initialize()
 		SDL_Log("Failed to create renderer: %s", SDL_GetError());
 		return false;
 	}
-	//
-	mPaddlePos.x = 10.0f;
-	mPaddlePos.y = 768.0f/2.0f;
+
+	//players
+	mPlayerOnePaddlePos.x = 10.0f;
+	mPlayerOnePaddlePos.y = 768.0f/2.0f;
+
+	mPlayerTwoPaddlePos.x = 1024 - thickness - 10;
+	mPlayerTwoPaddlePos.y = 768.0f / 2.0f;
+
 	mBallPos.x = 1024.0f/2.0f;
 	mBallPos.y = 768.0f/2.0f;
 	mBallVel.x = -200.0f;
 	mBallVel.y = 235.0f;
+
+
 	return true;
 }
 
@@ -102,14 +110,24 @@ void Game::ProcessInput()
 	}
 	
 	// Update paddle direction based on W/S keys
-	mPaddleDir = 0;
+	mPlayerOnePaddleDir = 0;
 	if (state[SDL_SCANCODE_W])
 	{
-		mPaddleDir -= 1;
+		mPlayerOnePaddleDir -= 1;
 	}
 	if (state[SDL_SCANCODE_S])
 	{
-		mPaddleDir += 1;
+		mPlayerOnePaddleDir += 1;
+	}
+
+	mPlayerTwoPaddleDir = 0;
+	if (state[SDL_SCANCODE_I])
+	{
+		mPlayerTwoPaddleDir -= 1;
+	}
+	if (state[SDL_SCANCODE_K])
+	{
+		mPlayerTwoPaddleDir += 1;
 	}
 }
 
@@ -133,17 +151,32 @@ void Game::UpdateGame()
 	mTicksCount = SDL_GetTicks();
 	
 	// Update paddle position based on direction
-	if (mPaddleDir != 0)
+	if (mPlayerOnePaddleDir != 0)
 	{
-		mPaddlePos.y += mPaddleDir * 300.0f * deltaTime;
+		mPlayerOnePaddlePos.y += mPlayerOnePaddleDir * 300.0f * deltaTime;
 		// Make sure paddle doesn't move off screen!
-		if (mPaddlePos.y < (paddleH/2.0f + thickness))
+		if (mPlayerOnePaddlePos.y < (paddleH/2.0f + thickness))
 		{
-			mPaddlePos.y = paddleH/2.0f + thickness;
+			mPlayerOnePaddlePos.y = paddleH/2.0f + thickness;
 		}
-		else if (mPaddlePos.y > (768.0f - paddleH/2.0f - thickness))
+		else if (mPlayerOnePaddlePos.y > (768.0f - paddleH/2.0f - thickness))
 		{
-			mPaddlePos.y = 768.0f - paddleH/2.0f - thickness;
+			mPlayerOnePaddlePos.y = 768.0f - paddleH/2.0f - thickness;
+		}
+	}
+
+	// Update paddle position based on direction
+	if (mPlayerTwoPaddleDir != 0)
+	{
+		mPlayerTwoPaddlePos.y += mPlayerTwoPaddleDir * 300.0f * deltaTime;
+		// Make sure paddle doesn't move off screen!
+		if (mPlayerTwoPaddlePos.y < (paddleH / 2.0f + thickness))
+		{
+			mPlayerTwoPaddlePos.y = paddleH / 2.0f + thickness;
+		}
+		else if (mPlayerTwoPaddlePos.y > (768.0f - paddleH / 2.0f - thickness))
+		{
+			mPlayerTwoPaddlePos.y = 768.0f - paddleH / 2.0f - thickness;
 		}
 	}
 	
@@ -153,16 +186,28 @@ void Game::UpdateGame()
 	
 	// Bounce if needed
 	// Did we intersect with the paddle?
-	float diff = mPaddlePos.y - mBallPos.y;
+	float playerAdiff = mPlayerOnePaddlePos.y - mBallPos.y;
+	float playerBdiff = mPlayerTwoPaddlePos.y - mBallPos.y;
 	// Take absolute value of difference
-	diff = (diff > 0.0f) ? diff : -diff;
+	playerAdiff = (playerAdiff > 0.0f) ? playerAdiff : -playerAdiff;
+	playerBdiff = (playerBdiff > 0.0f) ? playerBdiff : -playerBdiff;
 	if (
 		// Our y-difference is small enough
-		diff <= paddleH / 2.0f &&
+		playerAdiff <= paddleH / 2.0f &&
 		// We are in the correct x-position
 		mBallPos.x <= 25.0f && mBallPos.x >= 20.0f &&
 		// The ball is moving to the left
 		mBallVel.x < 0.0f)
+	{
+		mBallVel.x *= -1.0f;
+	}
+	else if (
+		// Our y-difference is small enough
+		playerBdiff <= paddleH / 2.0f &&
+		// We are in the correct x-position
+		mBallPos.x <= 999.0f && mBallPos.x >= 990.0f &&
+		// The ball is moving to the rightiiiiii
+		mBallVel.x > 0.0f)
 	{
 		mBallVel.x *= -1.0f;
 	}
@@ -171,10 +216,9 @@ void Game::UpdateGame()
 	{
 		mIsRunning = false;
 	}
-	// Did the ball collide with the right wall?
-	else if (mBallPos.x >= (1024.0f - thickness) && mBallVel.x > 0.0f)
+	else if (mBallPos.x >= 1024.0f)
 	{
-		mBallVel.x *= -1.0f;
+		mIsRunning = false;
 	}
 	
 	// Did the ball collide with the top wall?
@@ -220,21 +264,22 @@ void Game::GenerateOutput()
 	wall.y = 768 - thickness;
 	SDL_RenderFillRect(mRenderer, &wall);
 	
-	// Draw right wall
-	wall.x = 1024 - thickness;
-	wall.y = 0;
-	wall.w = thickness;
-	wall.h = 1024;
-	SDL_RenderFillRect(mRenderer, &wall);
-	
-	// Draw paddle
-	SDL_Rect paddle{
-		static_cast<int>(mPaddlePos.x),
-		static_cast<int>(mPaddlePos.y - paddleH/2),
+	// Draw paddles
+	SDL_Rect playerOne{
+		static_cast<int>(mPlayerOnePaddlePos.x),
+		static_cast<int>(mPlayerOnePaddlePos.y - paddleH/2),
 		thickness,
 		static_cast<int>(paddleH)
 	};
-	SDL_RenderFillRect(mRenderer, &paddle);
+	SDL_RenderFillRect(mRenderer, &playerOne);
+
+	SDL_Rect playerTwo{
+	static_cast<int>(mPlayerTwoPaddlePos.x),
+	static_cast<int>(mPlayerTwoPaddlePos.y - paddleH / 2),
+	thickness,
+	static_cast<int>(paddleH)
+	};
+	SDL_RenderFillRect(mRenderer, &playerTwo);
 	
 	// Draw ball
 	SDL_Rect ball{	
